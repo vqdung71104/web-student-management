@@ -6,6 +6,9 @@ import './HomePage.css';
 
 function HomePage() {
   const [students, setStudents] = useState([]);
+  const [filteredStudents, setFilteredStudents] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortAsc, setSortAsc] = useState(true);
   const [newlyAddedId, setNewlyAddedId] = useState(null);
   const navigate = useNavigate();
 
@@ -15,13 +18,28 @@ function HomePage() {
 
   const fetchStudents = () => {
     axios.get('http://localhost:5000/api/students')
-      .then(response => setStudents(response.data))
+      .then(response => {
+        setStudents(response.data);
+        setFilteredStudents(response.data);
+      })
       .catch(error => console.error("Lỗi khi fetch danh sách:", error));
   };
 
+  // Filter students theo thời gian thực khi searchTerm thay đổi
+  useEffect(() => {
+    if (searchTerm.trim() === '') {
+      setFilteredStudents(students);
+    } else {
+      const filtered = students.filter(student =>
+        student.name.toLowerCase().includes(searchTerm.toLowerCase()) 
+      );
+      setFilteredStudents(filtered);
+    }
+  }, [searchTerm, students]);
+
   const handleStudentAdded = (newStudent) => {
-    // Sử dụng functional update để tránh stale closure
     setStudents(prevStudents => [...prevStudents, newStudent]);
+    // filteredStudents sẽ tự động update qua useEffect
     
     // Highlight hàng vừa thêm
     setNewlyAddedId(newStudent._id);
@@ -36,6 +54,29 @@ function HomePage() {
     navigate(`/edit/${id}`);
   };
 
+  const handleDelete = (id) => {
+    const confirmDelete = window.confirm("Bạn có chắc chắn muốn xóa không?");
+    if (confirmDelete) {
+      axios.delete(`http://localhost:5000/api/students/${id}`)
+        .then(() => {
+          setStudents(prevStudents => prevStudents.filter(student => student._id !== id));
+        })
+        .catch(error => {
+          console.error("Lỗi khi xóa học sinh:", error);
+        });
+    }
+  };
+
+  
+  // Sắp xếp danh sách đã được filter
+  const sortedStudents = [...filteredStudents].sort((a, b) => {
+    const nameA = a.name.toLowerCase();
+    const nameB = b.name.toLowerCase();
+    if (nameA < nameB) return sortAsc ? -1 : 1;
+    if (nameA > nameB) return sortAsc ? 1 : -1;
+    return 0;
+  });
+
   return (
     <div className="home-page">
       <header className="App-header">
@@ -44,10 +85,57 @@ function HomePage() {
       
       <AddStudentForm onStudentAdded={handleStudentAdded} />
       
+      {/* Search Bar */}
+      <div style={{ padding: '20px', maxWidth: '500px', margin: '0 auto' }}>
+        <input
+          type="text"
+          placeholder="Tìm kiếm theo tên..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{
+            width: '100%',
+            padding: '12px',
+            fontSize: '16px',
+            border: '2px solid #ddd',
+            borderRadius: '8px',
+            boxSizing: 'border-box',
+            transition: 'border-color 0.3s ease'
+          }}
+          onFocus={(e) => e.target.style.borderColor = '#282c34'}
+          onBlur={(e) => e.target.style.borderColor = '#ddd'}
+        />
+        {searchTerm && (
+          <p style={{ color: '#666', marginTop: '10px', fontSize: '14px' }}>
+            Tìm thấy {filteredStudents.length} kết quả
+          </p>
+        )}
+      </div>
+      
       <main style={{ padding: '20px' }}>
-        <h2>Danh Sách Học Sinh</h2>
-        {students.length === 0 ? (
-          <p>Chưa có học sinh nào trong danh sách.</p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h2>Danh Sách Học Sinh</h2>
+          <button 
+            onClick={() => setSortAsc(prev => !prev)}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#2196F3',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              transition: 'all 0.3s ease'
+            }}
+            onMouseEnter={(e) => e.target.style.backgroundColor = '#0b7dda'}
+            onMouseLeave={(e) => e.target.style.backgroundColor = '#2196F3'}
+          >
+            Sắp xếp theo tên: {sortAsc ? 'A → Z' : 'Z → A'}
+          </button>
+        </div>
+        
+        {sortedStudents.length === 0 ? (
+          <p>{searchTerm ? 'Không tìm thấy học sinh nào phù hợp.' : 'Chưa có học sinh nào trong danh sách.'}</p>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '20px' }}>
             <thead>
@@ -59,7 +147,7 @@ function HomePage() {
               </tr>
             </thead>
             <tbody>
-              {students.map((student, index) => (
+              {sortedStudents.map((student, index) => (
                 <tr 
                   key={student._id || index}
                   style={{ 
@@ -76,6 +164,12 @@ function HomePage() {
                       onClick={() => handleEdit(student._id)}
                     >
                       Sửa
+                    </button>                    
+                    <button 
+                      onClick={()=>handleDelete(student._id)}
+                      className="delete-button"
+                    >
+                      Xóa
                     </button>
                   </td>
                 </tr>
